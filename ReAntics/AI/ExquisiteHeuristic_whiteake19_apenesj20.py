@@ -29,7 +29,7 @@ class AIPlayer(Player):
     #   cpy           - whether the player is a copy (when playing itself)
     ##
     def __init__(self, inputPlayerId):
-        super(AIPlayer,self).__init__(inputPlayerId, "ExquisiteHeuristic")
+        super(AIPlayer,self).__init__(inputPlayerId, "Ai")
         self.depth_limit = 2
         self.anthillCoords = None
         self.tunnelCoords = None
@@ -101,8 +101,9 @@ class AIPlayer(Player):
     #Return: The Move to be made
     ##
     def getMove(self, currentState):
+        maxPlayer = currentState.whoseTurn
         root = {"move":None, "state":currentState, "value":0, "parent":None, "depth":0}
-        move = self.bfs(root, 0)
+        move = self.bfs(root, 0, maxPlayer)
         return move
 
     ##
@@ -139,10 +140,13 @@ class AIPlayer(Player):
     #
     # This agent evaluates the state and returns a double between -1.0 and 1.0
     #
-    def evaluateState(self, gs):
-        myInv = getCurrPlayerInventory(gs)
-        theirInv = getEnemyInv(self, gs)
-        me = gs.whoseTurn
+    def evaluateState(self, gs, me):
+        if gs.whoseTurn == me:
+            myInv = getCurrPlayerInventory(gs)
+            theirInv = getEnemyInv(self, gs)
+        else:
+            myInv = getEnemyInv(self, gs)
+            theirInv = getCurrPlayerInventory(gs)
         myQueen = getAntList(gs, me, (QUEEN,))[0]
         enemyAntsThreat = getAntList(gs, 1-me, (DRONE, R_SOLDIER))
         myWorkers = getAntList(gs, me, (WORKER,))
@@ -188,13 +192,16 @@ class AIPlayer(Player):
 
         #if we have more than two workers, throw out this option
         if len(myWorkers) > 2:
+            print(-1)
             return -1.0
 
-        if len(getAntList(gs, me, (R_SOLDIER,))) > 0:
+        if len(getAntList(gs, me, (R_SOLDIER, DRONE))) > 0:
+            print(-1)
             return -1
 
         #remove nodes where an ant is sitting idle on the hill
         if myQueen.coords == self.anthillCoords:
+            print(-1)
             return -1.0
 
 
@@ -297,7 +304,7 @@ class AIPlayer(Player):
 
 
         output = (20*myfoodScore + 20*antDiff + myCarryScore + foodDistScore + 10*attackScore) / 53
-
+        print(output)
         return output
 
     ##
@@ -311,7 +318,7 @@ class AIPlayer(Player):
         states = []
         for move in moves:
             newNode = {"move":move}
-            newNode["state"] = getNextState(node["state"], newNode["move"])
+            newNode["state"] = getNextStateAdversarial(node["state"], newNode["move"])
             newNode["value"] = 0 # this is updated in bfs
             newNode["parent"] = node
             newNode["depth"] = node["depth"]+1
@@ -324,14 +331,16 @@ class AIPlayer(Player):
     # This function takes a list of nodes and takes the average of the values accossiated with
     # each and returns that average value
     #
-    def evalListNodes(self, nodes):
-        sum = 0
-        total = 0
-        for node in nodes:
-            if node["value"] != -1:
-                sum += node["value"]
-                total += 1
-        return sum / max(total, 1)
+    def evalListNodes(self, nodes, maxPlayer):
+        #if parent maxPlayer
+        if nodes[0]["parent"]["state"].whoseTurn == maxPlayer:
+            print("max")
+            maxNode = max(nodes, key=lambda k: k["value"])
+            return maxNode["value"]
+        else:
+            print("min")
+            minNode = min(nodes, key=lambda k: k["value"])
+            return minNode["value"]
 
 
     ##
@@ -343,23 +352,22 @@ class AIPlayer(Player):
     # Then the values of the nodes are averaged and propigated up
     # The move from the node with the best value at depth 0 is returned as the best move to make
     #
-    def bfs(self, node, depth):
+    def bfs(self, node, depth, maxPlayer):
         newNodes = self.expandNode(node)
         #it is depth + 1 since we just expanded the node and are
         #now evaluating nodes at depth + 1
         if depth+1 < self.depth_limit:
             #if the next set of nodes are inside the depth limit, do bfs()
             for n in newNodes:
-                n["value"] = self.evaluateState(n["state"])
-                if n["value"] != -1.0:
-                    n["value"] = (0.6*self.evaluateState(n["state"]))+(0.4*self.bfs(n, depth+1))
+                # if n["value"] != -1:
+                n["value"] = self.bfs(n, depth+1, maxPlayer)
         else:
             #else find the values of each node
             for n in newNodes:
-                n["value"] = self.evaluateState(n["state"])
-        evaluation = self.evalListNodes(newNodes)
+                n["value"] = self.evaluateState(n["state"], maxPlayer)
+        evaluation = self.evalListNodes(newNodes, maxPlayer)
         if depth > 0:
             return evaluation
         else:
-            sortedNodes = sorted(newNodes, key=lambda k: k["value"])
-            return sortedNodes[len(sortedNodes)-1]["move"]
+            maxNode = max(newNodes, key=lambda k: k["value"])
+            return maxNode["move"]
