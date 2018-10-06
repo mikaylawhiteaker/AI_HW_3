@@ -40,6 +40,7 @@ class AIPlayer(Player):
         self.prunesZero = 0
         self.prunesOne = 0
         self.prunesTwo = 0
+        self.forwardPruneLength = 5
 
 
     ##
@@ -146,6 +147,7 @@ class AIPlayer(Player):
         self.myFoodCoords = None
         self.maxTunnelDist = 0
         self.maxFoodDist = 0
+        self.forwardPruneLength = 5
         pass
 
     ##
@@ -330,6 +332,8 @@ class AIPlayer(Player):
     def expandNode(self, node, maxPlayer):
         moves = listAllLegalMoves(node["state"])
         states = []
+        fullNodeList = []
+        forwardPrunedNodes = []
         for move in moves:
             newNode = {"move":move}
             newNode["state"] = getNextStateAdversarial(node["state"], newNode["move"])
@@ -338,9 +342,16 @@ class AIPlayer(Player):
             newNode["depth"] = node["depth"]+1
             states.append(newNode)
         if node["state"].whoseTurn == maxPlayer:
-            return sorted(states, key=lambda k: k["value"], reverse=True)
+            fullNodeList = sorted(states, key=lambda k: k["value"], reverse=True)
         else:
-            return sorted(states, key=lambda k: k["value"])
+            fullNodeList = sorted(states, key=lambda k: k["value"])
+        if len(fullNodeList) > self.forwardPruneLength:
+            for i in range(0, self.forwardPruneLength):
+                forwardPrunedNodes.append(fullNodeList[i])
+        else:
+            forwardPrunedNodes = fullNodeList
+
+        return forwardPrunedNodes
 
     ##
     # evalListNodes
@@ -380,7 +391,7 @@ class AIPlayer(Player):
                 for n in newNodes:
                     value = max(value, self.alphabeta(n, depth+1, alpha, beta, maxPlayer))
                     alpha = max(alpha, value)
-                    if alpha+.5 >= beta:
+                    if alpha+.2 >= beta:
                         if depth == 0:
                             print(alpha)
                             self.prunesZero += 1
@@ -394,7 +405,7 @@ class AIPlayer(Player):
                 for n in newNodes:
                     value = min(value, self.alphabeta(n, depth+1, alpha, beta, maxPlayer))
                     beta = min(beta, value)
-                    if alpha+.5 >= beta:
+                    if alpha+.2 >= beta:
                         if depth == 0:
                             self.prunesZero += 1
                         elif depth == 1:
